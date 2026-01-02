@@ -1,0 +1,41 @@
+xp_per_rupee: 1
+max_xp_per_txn: 500
+
+persona_multipliers:
+  NEW: 1.5
+  RETURNING: 1.2
+  POWER: 1.0
+
+daily_cac_limit:
+  NEW: 200
+  RETURNING: 150
+  POWER: 100
+
+gold_reward_value: 50
+
+feature_flags:
+  prefer_xp: false
+  prefer_gold: true
+  cooldown_enabled: true
+
+policy_version: v1
+
+cache:
+  default_ttl: 86400
+  idempotency_ttl: 86400
+  persona_ttl: 2592000
+  cac_ttl: 86400
+
+redis:
+  host: localhost
+  port: 6379
+  max_connections: 50
+  socket_connect_timeout: 5
+  socket_timeout: 5
+  retry_on_timeout: true
+  health_check_interval: 30
+  decode_responses: true
+
+reward_weights:
+  XP: 0.7
+  CASHBACK: 0.3
