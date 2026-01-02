@@ -1,8 +1,4 @@
 import logging
-logging.basicConfig(level=logging.DEBUG)
-
-
-
 import uuid
 import asyncio
 from datetime import date
@@ -12,11 +8,13 @@ from app.cache.cache_manager import get_cache
 from app.models.response import RewardResponse
 from app.models.request import RewardRequest
 from app.models.enum import RewardType, Persona, ReasonCode
+from app.services.persona_service import get_persona_service
 
 _cache: Optional[Any] = None
 _config_validation_cache: Dict[str, bool] = {}
 _today_cache: Optional[Tuple[str, date]] = None
 _today_lock = asyncio.Lock()
+
 
 async def _get_cache():
     """Get or initialize async cache instance."""
@@ -65,11 +63,20 @@ def _validate_config_cached(cfg: Dict[str, Any], persona: str) -> None:
 
 
 def _get_valid_persona(persona_value: Any) -> str:
-    """Validate and return a valid persona value."""
+    """
+    Validate and return a valid persona value.
+    
+    Note: Persona can be mocked using:
+    - Local JSON file (persona_mock.json)
+    - In-memory map (via config or API)
+    - Simple mock endpoint (/persona/mock/set)
+    """
     if isinstance(persona_value, str):
         valid_personas = [p.value for p in Persona]
         if persona_value in valid_personas:
             return persona_value
+        # Log invalid persona value for monitoring/debugging
+        logging.warning(f"Invalid persona value '{persona_value}' encountered. Defaulting to NEW. Valid values: {valid_personas}")
     return Persona.NEW.value
 
 
@@ -126,7 +133,17 @@ async def calculate_reward(req: RewardRequest) -> RewardResponse:
         
         if isinstance(persona_raw, Exception):
             persona_raw = None
-        persona = _get_valid_persona(persona_raw) if persona_raw else Persona.NEW.value
+        
+        # Check persona mocking first (highest priority)
+        persona_service = get_persona_service()
+        mocked_persona = await persona_service.get_persona(req.user_id)
+        
+        if mocked_persona:
+            # Use mocked persona (skip transaction-based progression)
+            persona = mocked_persona
+        else:
+            # Use cached persona or default to NEW
+            persona = _get_valid_persona(persona_raw) if persona_raw else Persona.NEW.value
         
         if isinstance(txn_count_raw, Exception):
             txn_count_raw = 0
@@ -142,10 +159,12 @@ async def calculate_reward(req: RewardRequest) -> RewardResponse:
             txn_count = 0
         txn_count += 1
         
-        if persona == Persona.NEW.value and txn_count >= 3:
-            persona = Persona.RETURNING.value
-        elif persona == Persona.RETURNING.value and txn_count >= 10:
-            persona = Persona.POWER.value
+        # Only progress persona if not mocked
+        if not mocked_persona:
+            if persona == Persona.NEW.value and txn_count >= 3:
+                persona = Persona.RETURNING.value
+            elif persona == Persona.RETURNING.value and txn_count >= 10:
+                persona = Persona.POWER.value
         
         if isinstance(current_cac_raw, Exception):
             current_cac_raw = None
@@ -224,10 +243,6 @@ async def calculate_reward(req: RewardRequest) -> RewardResponse:
         
         cache_writes.append(cache.set(persona_key, persona, ttl=persona_ttl))
         cache_writes.append(cache.set(txn_count_key, txn_count, ttl=persona_ttl))
-        
-        # Update CAC for all reward types to track daily limit usage
-        # CAC tracks the equivalent cashback value consumed, regardless of reward type
-        # This ensures the daily limit check (line 189) works correctly
         new_cac = current_cac + reward_value
         cache_writes.append(cache.set(cac_key, new_cac, ttl=cac_ttl))
         

@@ -21,11 +21,11 @@ async def clear_redis():
             decode_responses=True
         )
         
-        # Test connection
+       
         await redis.ping()
-        print("✓ Connected to Redis")
+        print(" Connected to Redis")
         
-        # Get all keys
+        
         print("Scanning for keys...")
         keys = []
         async for key in redis.scan_iter("*"):
@@ -38,26 +38,26 @@ async def clear_redis():
         
         print(f"Found {len(keys)} key(s) to delete")
         
-        # Delete all keys
+        
         if keys:
             deleted = await redis.delete(*keys)
-            print(f"✓ Deleted {deleted} key(s)")
+            print(f"Deleted {deleted} key(s)")
         
-        # Verify
+       
         remaining_keys = []
         async for key in redis.scan_iter("*"):
             remaining_keys.append(key)
         
         if remaining_keys:
-            print(f"⚠ Warning: {len(remaining_keys)} key(s) still remain")
+            print(f" {len(remaining_keys)} key(s) still remain")
         else:
-            print("✓ Redis is now empty")
+            print(" Redis is now empty")
         
         await redis.close()
-        print("✓ Connection closed")
+        print(" Connection closed")
         
     except Exception as e:
-        print(f"✗ Error: {str(e)}")
+        print(f" Error: {str(e)}")
         raise
 
 

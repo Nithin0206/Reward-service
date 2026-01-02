@@ -11,8 +11,6 @@ async def decide_reward(req: RewardRequest) -> RewardResponse:
     """
     Decide reward for a transaction.
     
-    Phase 1: Fully async endpoint with optimized cache operations.
-    
     Args:
         req: RewardRequest containing transaction details
         

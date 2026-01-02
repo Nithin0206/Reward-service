@@ -13,6 +13,13 @@ class Persona(str, Enum):
     POWER = "POWER"
 
 
+class TransactionType(str, Enum):
+    PAYMENT = "PAYMENT"
+    REFUND = "REFUND"
+    REVERSAL = "REVERSAL"
+    ADJUSTMENT = "ADJUSTMENT"
+
+
 class ReasonCode(str, Enum):
     XP_APPLIED = "XP_APPLIED"
     CASHBACK_GRANTED = "CASHBACK_GRANTED"

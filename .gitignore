@@ -3,8 +3,12 @@ PERFORMANCE_ANALYSIS.md
 POSTMAN_TESTING_GUIDE.md
 REWARD_DECISION_LOGIC.md
 SCALABILITY_ANALYSIS.md
+PERSONA_MOCKING_GUIDE.md
 performance.md
 Scalability.md
+
+# Mock files
+persona_mock.json
 
 # Python
 __pycache__/

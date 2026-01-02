@@ -39,3 +39,8 @@ redis:
 reward_weights:
   XP: 0.7
   CASHBACK: 0.3
+
+persona_mocking:
+  enabled: false
+  json_file_path: "persona_mock.json"
+  in_memory_map: {}
