@@ -1,5 +1,6 @@
 xp_per_rupee: 1
 max_xp_per_txn: 500
+max_cashback_percentage: 10  # Maximum 10% cashback per transaction
 
 persona_multipliers:
   NEW: 1.5

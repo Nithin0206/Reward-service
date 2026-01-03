@@ -57,8 +57,16 @@ XP = min(amount × xp_per_rupee × persona_multiplier, max_xp_per_txn)
 
 ### Cashback Calculation
 ```
-Cashback = min(remaining_daily_limit, calculated_xp)
+Max Cashback per Transaction = amount × max_cashback_percentage (default: 10%)
+Cashback = min(remaining_daily_limit, calculated_xp, max_cashback_per_transaction)
 ```
+
+**Example**: For a ₹100 transaction by NEW user (1.5x multiplier):
+- XP calculated: 100 × 1 × 1.5 = 150 XP
+- Max 10% cashback: 100 × 10% = ₹10
+- Actual cashback: min(remaining_limit, 150, 10) = **₹10** ✅
+
+This ensures no transaction can give more than 10% cashback, making it sustainable like real-world apps.
 
 ## 📡 API Endpoints
 
@@ -86,7 +94,7 @@ Calculate and grant reward for a transaction.
   "decision_id": "uuid",
   "policy_version": "v1",
   "reward_type": "CHECKOUT",
-  "reward_value": 150,
+  "reward_value": 10,
   "xp": 150,
   "reason_codes": ["CASHBACK_GRANTED"],
   "meta": {
@@ -96,6 +104,8 @@ Calculate and grant reward for a transaction.
   }
 }
 ```
+
+**Note**: For ₹100 transaction, XP is 150 (with 1.5x multiplier) but cashback is capped at ₹10 (10% of amount).
 
 ### GET `/health`
 Health check endpoint with cache status.
@@ -134,6 +144,7 @@ Edit `app/config.yaml` to customize:
 
 - **Feature Flags**: `prefer_xp`, `prefer_gold`
 - **XP Settings**: `xp_per_rupee`, `max_xp_per_txn`
+- **Cashback Cap**: `max_cashback_percentage` (default: 10% per transaction)
 - **Persona Multipliers**: NEW, RETURNING, POWER
 - **Daily CAC Limits**: Per persona limits
 - **Cache TTLs**: Idempotency, persona, CAC cache durations
@@ -195,12 +206,34 @@ pytest -v
 - Idempotency (duplicate handling)
 - Constraints (large inputs, efficiency)
 
-## 🗄️ Redis Keys
+## 🗄️ Redis Keys & Cashback Tracking
 
-- `idem:{txn_id}:{user_id}:{merchant_id}` - Idempotency
-- `persona:{user_id}` - User persona
-- `txn_count:{user_id}` - Transaction count
-- `cac:{user_id}:{date}` - Daily cashback usage
+- `idem:{txn_id}:{user_id}:{merchant_id}` - Idempotency (24h TTL)
+- `persona:{user_id}` - User persona (30 days TTL)
+- `txn_count:{user_id}` - Transaction count (30 days TTL)
+- `cac:{user_id}:{date}` - **Daily cashback accumulated** (24h TTL)
+
+### Cashback Accumulation Example
+
+```
+User: user123, Date: 2024-01-15
+
+Transaction 1: ₹100 → Cashback: ₹10
+  CAC = 0 + 10 = 10
+  Redis: cac:user123:2024-01-15 = 10
+
+Transaction 2: ₹200 → Cashback: ₹20
+  CAC = 10 + 20 = 30
+  Redis: cac:user123:2024-01-15 = 30
+
+Transaction 3: ₹500 → Cashback: ₹50
+  CAC = 30 + 50 = 80
+  Redis: cac:user123:2024-01-15 = 80
+
+... continues until daily limit (e.g., ₹200 for NEW users)
+
+Next day (2024-01-16): CAC resets to 0
+```
 
 ## 📦 Project Structure
 
@@ -268,17 +301,26 @@ python load_test.py
    - Persona can be overridden via mocking (for testing/special cases)
    - Default persona for new users is **NEW**
 
-3. **Daily CAC Limits**
-   - CAC (Cashback Amount Claimed) resets daily at midnight (based on server timezone)
-   - Daily limits are **per persona** and enforced strictly
+3. **Daily CAC Limits & Tracking**
+   - **CAC (Cashback Amount Claimed)** tracks accumulated cashback per user per day
+   - Stored in Redis/cache with key: `cac:{user_id}:{date}` (e.g., `cac:user123:2024-01-15`)
+   - CAC resets daily at midnight (based on server timezone)
+   - Daily limits are **per persona** and enforced strictly:
+     - NEW: ₹200/day
+     - RETURNING: ₹150/day
+     - POWER: ₹100/day
    - When limit is reached/exceeded, system automatically switches to XP rewards
-   - CAC accumulates throughout the day regardless of reward type granted
+   - CAC increments with each cashback reward granted (tracked cumulatively)
 
 4. **Reward Calculation**
+   - **10% Cashback Cap**: Maximum cashback per transaction is 10% of transaction amount
    - XP is calculated even when cashback is granted (for transparency)
-   - Persona multipliers apply to XP calculation, not cashback amount
+   - Persona multipliers apply to XP calculation, not directly to cashback amount
    - Maximum XP per transaction is capped at `max_xp_per_txn` (default: 500)
-   - Cashback cannot exceed calculated XP value
+   - Cashback is capped by **three limits** (whichever is lowest):
+     1. Transaction percentage cap (10% of amount)
+     2. Calculated XP value
+     3. Remaining daily CAC limit
 
 5. **Feature Flags Priority**
    - `prefer_gold` has higher priority than `prefer_xp`

@@ -22,6 +22,7 @@ async def test_cac_limit_enforced_for_new_user(mock_cache, sample_request, mock_
          patch('app.services.reward_engine.CONFIG', {
              "xp_per_rupee": 1,
              "max_xp_per_txn": 500,
+             "max_cashback_percentage": 10,
              "persona_multipliers": {"NEW": 1.5, "RETURNING": 1.2, "POWER": 1.0},
              "daily_cac_limit": {"NEW": 200, "RETURNING": 150, "POWER": 100},
              "gold_reward_value": 50,
@@ -33,7 +34,7 @@ async def test_cac_limit_enforced_for_new_user(mock_cache, sample_request, mock_
         response = await calculate_reward(sample_request)
         
         assert response.reward_type == RewardType.CHECKOUT
-        assert response.reward_value == 1
+        assert response.reward_value == 1  # Capped by remaining daily limit (200 - 199 = 1)
         assert response.meta["daily_cac_used"] == 199
         assert response.meta["daily_cac_limit"] == 200
 
@@ -53,6 +54,7 @@ async def test_cac_limit_enforced_for_returning_user(mock_cache, sample_request,
          patch('app.services.reward_engine.CONFIG', {
              "xp_per_rupee": 1,
              "max_xp_per_txn": 500,
+             "max_cashback_percentage": 10,
              "persona_multipliers": {"NEW": 1.5, "RETURNING": 1.2, "POWER": 1.0},
              "daily_cac_limit": {"NEW": 200, "RETURNING": 150, "POWER": 100},
              "gold_reward_value": 50,
@@ -64,7 +66,7 @@ async def test_cac_limit_enforced_for_returning_user(mock_cache, sample_request,
         response = await calculate_reward(sample_request)
         
         assert response.reward_type == RewardType.CHECKOUT
-        assert response.reward_value == 1
+        assert response.reward_value == 1  # Capped by remaining daily limit (150 - 149 = 1)
         assert response.meta["daily_cac_used"] == 149
         assert response.meta["daily_cac_limit"] == 150
 
@@ -87,6 +89,7 @@ async def test_cac_limit_enforced_for_power_user(mock_cache, sample_request, moc
          patch('app.services.reward_engine.CONFIG', {
              "xp_per_rupee": 1,
              "max_xp_per_txn": 500,
+             "max_cashback_percentage": 10,
              "persona_multipliers": {"NEW": 1.5, "RETURNING": 1.2, "POWER": 1.0},
              "daily_cac_limit": {"NEW": 200, "RETURNING": 150, "POWER": 100},
              "gold_reward_value": 50,
@@ -98,7 +101,7 @@ async def test_cac_limit_enforced_for_power_user(mock_cache, sample_request, moc
         response = await calculate_reward(sample_request)
         
         assert response.reward_type == RewardType.CHECKOUT
-        assert response.reward_value == 1
+        assert response.reward_value == 1  # Capped by remaining daily limit (100 - 99 = 1)
         assert response.meta["daily_cac_used"] == 99
         assert response.meta["daily_cac_limit"] == 100
 
@@ -118,6 +121,7 @@ async def test_cac_exceeded_switches_to_xp(mock_cache, sample_request, mock_pers
          patch('app.services.reward_engine.CONFIG', {
              "xp_per_rupee": 1,
              "max_xp_per_txn": 500,
+             "max_cashback_percentage": 10,
              "persona_multipliers": {"NEW": 1.5, "RETURNING": 1.2, "POWER": 1.0},
              "daily_cac_limit": {"NEW": 200, "RETURNING": 150, "POWER": 100},
              "gold_reward_value": 50,
@@ -149,6 +153,7 @@ async def test_cac_cumulative_tracking(mock_cache, sample_request, mock_persona_
          patch('app.services.reward_engine.CONFIG', {
              "xp_per_rupee": 1,
              "max_xp_per_txn": 500,
+             "max_cashback_percentage": 10,
              "persona_multipliers": {"NEW": 1.5, "RETURNING": 1.2, "POWER": 1.0},
              "daily_cac_limit": {"NEW": 200, "RETURNING": 150, "POWER": 100},
              "gold_reward_value": 50,
@@ -172,6 +177,7 @@ async def test_cac_cumulative_tracking(mock_cache, sample_request, mock_persona_
          patch('app.services.reward_engine.CONFIG', {
              "xp_per_rupee": 1,
              "max_xp_per_txn": 500,
+             "max_cashback_percentage": 10,
              "persona_multipliers": {"NEW": 1.5, "RETURNING": 1.2, "POWER": 1.0},
              "daily_cac_limit": {"NEW": 200, "RETURNING": 150, "POWER": 100},
              "gold_reward_value": 50,
@@ -182,7 +188,9 @@ async def test_cac_cumulative_tracking(mock_cache, sample_request, mock_persona_
         
         response2 = await calculate_reward(sample_request)
         
-        assert response2.reward_value == 50
+        # First transaction: 100 * 10% = 10 rupees cashback
+        # Second transaction: also 10 rupees (both capped by 10% rule)
+        assert response2.reward_value == 10
         assert response2.meta["daily_cac_used"] == first_cac
 
 
@@ -202,6 +210,7 @@ async def test_cac_capped_by_xp_calculation(mock_cache, sample_request, mock_per
          patch('app.services.reward_engine.CONFIG', {
              "xp_per_rupee": 1,
              "max_xp_per_txn": 500,
+             "max_cashback_percentage": 10,
              "persona_multipliers": {"NEW": 1.5, "RETURNING": 1.2, "POWER": 1.0},
              "daily_cac_limit": {"NEW": 200, "RETURNING": 150, "POWER": 100},
              "gold_reward_value": 50,
@@ -213,7 +222,8 @@ async def test_cac_capped_by_xp_calculation(mock_cache, sample_request, mock_per
         response = await calculate_reward(sample_request)
         
         assert response.reward_type == RewardType.CHECKOUT
-        assert response.reward_value == 75
+        # XP = 50 * 1 * 1.5 = 75, but cashback capped at 50 * 10% = 5 rupees
+        assert response.reward_value == 5
         assert response.xp == 75
 
 
@@ -232,6 +242,7 @@ async def test_cac_daily_reset_simulation(mock_cache, sample_request, mock_perso
          patch('app.services.reward_engine.CONFIG', {
              "xp_per_rupee": 1,
              "max_xp_per_txn": 500,
+             "max_cashback_percentage": 10,
              "persona_multipliers": {"NEW": 1.5, "RETURNING": 1.2, "POWER": 1.0},
              "daily_cac_limit": {"NEW": 200, "RETURNING": 150, "POWER": 100},
              "gold_reward_value": 50,
@@ -249,6 +260,7 @@ async def test_cac_daily_reset_simulation(mock_cache, sample_request, mock_perso
          patch('app.services.reward_engine.CONFIG', {
              "xp_per_rupee": 1,
              "max_xp_per_txn": 500,
+             "max_cashback_percentage": 10,
              "persona_multipliers": {"NEW": 1.5, "RETURNING": 1.2, "POWER": 1.0},
              "daily_cac_limit": {"NEW": 200, "RETURNING": 150, "POWER": 100},
              "gold_reward_value": 50,
@@ -267,6 +279,7 @@ async def test_cac_daily_reset_simulation(mock_cache, sample_request, mock_perso
         
         response2 = await calculate_reward(sample_request)
         
-        assert response2.reward_value == 150
+        # New day, so CAC resets. 100 * 10% = 10 rupees cashback
+        assert response2.reward_value == 10
         assert response2.meta["daily_cac_used"] == 0
 

@@ -222,7 +222,15 @@ async def calculate_reward(req: RewardRequest) -> RewardResponse:
             reason = ReasonCode.XP_APPLIED
         else:
             reward_type = RewardType.CHECKOUT
-            reward_value = min(max(0, daily_limit - current_cac), xp)
+            
+            max_cashback_pct = cfg.get("max_cashback_percentage", 10)
+            if not isinstance(max_cashback_pct, (int, float)) or max_cashback_pct < 0 or max_cashback_pct > 100:
+                raise ValueError("max_cashback_percentage must be between 0 and 100")
+            max_cashback_for_txn = int(req.amount * max_cashback_pct / 100)
+            
+            cashback_amount = min(xp, max_cashback_for_txn)
+
+            reward_value = min(max(0, daily_limit - current_cac), cashback_amount)
             reason = ReasonCode.CASHBACK_GRANTED
         
         response = RewardResponse(
