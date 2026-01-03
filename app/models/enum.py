@@ -15,9 +15,6 @@ class Persona(str, Enum):
 
 class TransactionType(str, Enum):
     PAYMENT = "PAYMENT"
-    REFUND = "REFUND"
-    REVERSAL = "REVERSAL"
-    ADJUSTMENT = "ADJUSTMENT"
 
 
 class ReasonCode(str, Enum):

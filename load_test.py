@@ -129,7 +129,7 @@ def send_request(
         "user_id": f"user_{random.randint(1, 100)}",
         "merchant_id": f"merchant_{random.randint(1, 5)}",
         "amount": round(random.uniform(10.0, 500.0), 2),  # Use float for amount
-        "txn_type": "PAYMENT",  # Use TransactionType.PAYMENT enum value in production
+        "txn_type": "PAYMENT",  # Only supported transaction type
         "ts": datetime.now().isoformat()
     }
     

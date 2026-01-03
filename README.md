@@ -77,11 +77,8 @@ Calculate and grant reward for a transaction.
 }
 ```
 
-**Transaction Types (Enum):**
-- `PAYMENT` - Regular payment transaction
-- `REFUND` - Refund transaction
-- `REVERSAL` - Transaction reversal
-- `ADJUSTMENT` - Adjustment transaction
+**Transaction Type:**
+- `PAYMENT` - Payment transaction (only supported type)
 
 **Response:**
 ```json
@@ -188,7 +185,15 @@ pytest -v
 - ✅ Configuration validation
 - ✅ Transaction type enum validation
 
-**Current Status:** 21/21 tests passing ✅
+**Current Status:** 37/37 tests passing ✅
+
+**Test Categories:**
+- Edge Cases (empty, null, zero, max/min values)
+- Boundary Cases (off-by-one, exact limits)
+- Invalid Cases (incorrect types, negative values)
+- Functional Cases (correct business logic)
+- Idempotency (duplicate handling)
+- Constraints (large inputs, efficiency)
 
 ## 🗄️ Redis Keys
 
@@ -245,5 +250,108 @@ python load_test.py
 ✅ **Idempotency**: Safe duplicate request handling  
 ✅ **Hot-Reload**: No downtime for config changes  
 ✅ **Comprehensive Logging**: Request ID tracking, timing middleware
+
+---
+
+## 📋 Assumptions & Design Constraints
+
+### **Business Logic Assumptions**
+
+1. **Transaction Processing**
+   - Each transaction is processed exactly once (idempotency key: `txn_id + user_id + merchant_id`)
+   - Duplicate transactions return cached response without modifying state
+   - Transaction amounts are in rupees and always positive (0.01 to 1,000,000)
+
+2. **Persona Classification**
+   - Persona progression is **irreversible** (NEW → RETURNING → POWER only)
+   - Transaction count includes all successful PAYMENT transactions
+   - Persona can be overridden via mocking (for testing/special cases)
+   - Default persona for new users is **NEW**
+
+3. **Daily CAC Limits**
+   - CAC (Cashback Amount Claimed) resets daily at midnight (based on server timezone)
+   - Daily limits are **per persona** and enforced strictly
+   - When limit is reached/exceeded, system automatically switches to XP rewards
+   - CAC accumulates throughout the day regardless of reward type granted
+
+4. **Reward Calculation**
+   - XP is calculated even when cashback is granted (for transparency)
+   - Persona multipliers apply to XP calculation, not cashback amount
+   - Maximum XP per transaction is capped at `max_xp_per_txn` (default: 500)
+   - Cashback cannot exceed calculated XP value
+
+5. **Feature Flags Priority**
+   - `prefer_gold` has higher priority than `prefer_xp`
+   - Gold rewards only available to POWER users when `prefer_gold=true`
+   - Feature flags can be changed via hot-reload without restart
+
+### **Technical Assumptions**
+
+1. **Caching & State**
+   - Redis is the primary cache (shared state across instances)
+   - Memory cache fallback is for **development only** (loses data on restart)
+   - Cache TTLs: Idempotency (1 day), Persona (30 days), CAC (1 day)
+   - No persistent database → data relies on Redis/cache
+
+2. **Concurrency & Race Conditions**
+   - Idempotency prevents race conditions for duplicate requests
+   - Redis atomic operations ensure consistency
+   - Cache writes are fire-and-forget (async background tasks)
+   - Multiple instances can run concurrently with Redis
+
+3. **Data Consistency**
+   - **Eventually consistent** for cache writes (fire-and-forget)
+   - **Strongly consistent** for reads (synchronous)
+   - No transactions across multiple cache operations
+   - Persona progression is deterministic (transaction count based)
+
+4. **Scalability**
+   - Stateless API design (all state in Redis)
+   - Horizontal scaling supported with Redis cluster
+   - Config hot-reload works across all instances (checks every hour)
+   - Single Redis instance is bottleneck for high scale
+
+5. **Input Validation**
+   - All inputs validated via Pydantic models
+   - Invalid inputs rejected at API layer (400 Bad Request)
+   - Empty/whitespace-only strings not allowed
+   - Transaction type must be PAYMENT (only supported type)
+
+### **Operational Assumptions**
+
+1. **Deployment**
+   - Service runs behind a load balancer in production
+   - Redis is highly available (Sentinel/Cluster)
+   - Config changes tested in staging before production
+   - Health checks monitored by orchestration platform
+
+2. **Error Handling**
+   - Redis failures fall back to memory cache (logged as warning)
+   - Invalid config falls back to defaults (logged as error)
+   - All exceptions caught at API layer (500 Internal Server Error)
+   - Request IDs tracked for debugging
+
+3. **Security**
+   - No authentication/authorization (assumed handled by API gateway)
+   - CORS allows all origins (should be restricted in production)
+   - No rate limiting (should be added for production)
+   - Admin endpoints (`/admin/reload-config`) should be protected
+
+4. **Monitoring**
+   - Health checks expected every 30-60 seconds
+   - Request IDs included in all responses for tracing
+   - Timing middleware for latency tracking
+   - No built-in metrics (Prometheus recommended)
+
+### **Known Limitations**
+
+⚠️ **No audit trail** - Rewards granted are not persisted to database  
+⚠️ **No rollback mechanism** - Rewards cannot be reversed after granting  
+⚠️ **No rate limiting** - Service vulnerable to abuse without external protection  
+⚠️ **Memory cache fallback** - Not suitable for multi-instance production  
+⚠️ **Timezone dependency** - Daily reset timing depends on server timezone  
+⚠️ **Config caching** - Hot-reload checks every hour (not real-time)
+
+---
 
 

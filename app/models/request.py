@@ -8,7 +8,7 @@ class RewardRequest(BaseModel):
     user_id: str = Field(..., min_length=1, description="User ID")
     merchant_id: str = Field(..., min_length=1, description="Merchant ID")
     amount: float = Field(..., gt=0, description="Transaction amount (must be positive)")
-    txn_type: TransactionType = Field(..., description="Transaction type (PAYMENT, REFUND, REVERSAL, ADJUSTMENT)")
+    txn_type: TransactionType = Field(..., description="Transaction type (PAYMENT only)")
     ts: str = Field(..., description="Timestamp")
     
     @field_validator('amount')
